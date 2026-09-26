@@ -1,15 +1,3 @@
-"""
-entrenamiento/entrenar.py
-
-Bucle de entrenamiento del ModeloLSTM sobre un corpus pequeno escrito a mano.
-
-Objetivo de esta fase: verificar que el ciclo completo
-(forward -> loss -> backward -> optimizador) funciona y que el modelo
-aprende patrones reales del texto (no verificar la calidad final del
-texto generado, para eso hara falta un corpus mucho mas grande via scraping,
-en la Fase 7).
-"""
-
 import sys
 import os
 

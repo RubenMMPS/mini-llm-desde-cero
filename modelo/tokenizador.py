@@ -1,14 +1,3 @@
-"""
-modelo/tokenizador.py
-
-Tokenizador a nivel carácter: la pieza más simple posible, pero funcional,
-para convertir texto <-> secuencias de enteros que el modelo puede procesar.
-
-Se usará en el resto del proyecto (entrenamiento, generación), así que
-lo tratamos como código real, no como un experimento desechable.
-"""
-
-
 class TokenizadorCaracter:
     """Tokenizador que trata cada carácter individual como un token."""
 

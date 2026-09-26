@@ -1,14 +1,3 @@
-"""
-modelo/lstm.py
-
-Modelo que predice el siguiente carácter de una secuencia, usando:
-    tokens -> embeddings -> LSTM -> capa lineal -> logits por carácter del vocabulario
-
-Los "logits" son las puntuaciones sin normalizar de cada carácter candidato;
-softmax (Fase 2) los convertiría en probabilidades, pero eso lo aplicaremos
-en la fase de entrenamiento/generación, no dentro del modelo.
-"""
-
 import torch
 import torch.nn as nn
 

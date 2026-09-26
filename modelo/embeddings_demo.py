@@ -1,11 +1,3 @@
-"""
-modelo/embeddings_demo.py
-
-Primer contacto con PyTorch: convertimos los índices que produce nuestro
-TokenizadorCaracter en vectores mediante nn.Embedding, y observamos su forma
-y su comportamiento antes de que se entrenen (todavía son aleatorios).
-"""
-
 import torch
 import torch.nn as nn
 
