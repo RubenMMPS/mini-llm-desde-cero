@@ -18,6 +18,16 @@ class TokenizadorCaracter:
         self.indice_a_caracter = {i: c for i, c in enumerate(caracteres_unicos)}
         self.tamano_vocabulario = len(caracteres_unicos)
 
+    @classmethod
+    def desde_vocabulario(cls, caracter_a_indice: dict):
+        """Reconstruye un tokenizador a partir de un vocabulario ya guardado
+        (por ejemplo, el que se almacena en el checkpoint), sin necesitar el corpus."""
+        tokenizador = cls.__new__(cls)
+        tokenizador.caracter_a_indice = dict(caracter_a_indice)
+        tokenizador.indice_a_caracter = {i: c for c, i in caracter_a_indice.items()}
+        tokenizador.tamano_vocabulario = len(caracter_a_indice)
+        return tokenizador
+
     def encode(self, texto: str) -> list[int]:
         """Convierte una cadena de texto en una lista de índices enteros."""
         return [self.caracter_a_indice[c] for c in texto]
