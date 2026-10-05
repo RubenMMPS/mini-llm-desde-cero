@@ -7,6 +7,7 @@ import requests
 LIBROS = [
     ("don_quijote.txt", "https://www.gutenberg.org/ebooks/2000.txt.utf-8"),
     ("vida_de_don_quijote_y_sancho.txt", "https://www.gutenberg.org/ebooks/75472.txt.utf-8"),
+    ("azul.txt", "https://www.gutenberg.org/ebooks/52894.txt.utf-8"),
 ]
 
 CARPETA_SALIDA = os.path.join(os.path.dirname(__file__), "raw")
