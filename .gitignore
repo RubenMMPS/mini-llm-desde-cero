@@ -5,8 +5,11 @@ venv/
 __pycache__/
 *.pyc
 
-# Datos de scraping (Fase 7) - pueden pesar mucho, no van al repo
-datos/*.txt
+# Datos generados automaticamente por los scripts (Fase 7/9) - no van al repo.
+# No es "datos/*.txt" a proposito, para no bloquear archivos escritos a mano como dialogo_semilla.txt, que si deben versionarse.
+datos/raw/
+datos/corpus_limpio.txt
+datos/dialogo_formateado.txt
 datos/*.csv
 datos/*.json
 
