@@ -66,6 +66,11 @@ def main():
     parser.add_argument("--top-k", type=int, default=None)
     parser.add_argument("--semilla", type=int, default=None, help="para resultados reproducibles")
     parser.add_argument("--checkpoint", default=RUTA_CHECKPOINT_POR_DEFECTO)
+    parser.add_argument(
+        "--dialogo", action="store_true",
+        help="envuelve --texto como 'tu: <texto>\\nquijote:' y recorta la respuesta "
+             "en el siguiente turno (requiere un checkpoint afinado para dialogo)",
+    )
     args = parser.parse_args()
 
     if args.temperatura <= 0:
@@ -82,8 +87,21 @@ def main():
     if desconocidos:
         sys.exit(f"Error: estos caracteres no estan en el vocabulario del modelo: {desconocidos}")
 
-    print(generar(modelo, tokenizador, longitud_contexto, texto,
-                  args.num_caracteres, args.temperatura, args.top_k))
+    if args.dialogo:
+        texto = f"tu: {texto}\nquijote:"
+
+    resultado = generar(modelo, tokenizador, longitud_contexto, texto,
+                         args.num_caracteres, args.temperatura, args.top_k)
+
+    if args.dialogo:
+        # Cortamos justo antes de que el modelo "invente" el siguiente turno
+        # del usuario (patron que debería haber aprendido en el fine-tuning)
+        marcador = "\ntu:"
+        posicion_corte = resultado.find(marcador, len(texto))
+        if posicion_corte != -1:
+            resultado = resultado[:posicion_corte]
+
+    print(resultado)
 
 
 if __name__ == "__main__":
