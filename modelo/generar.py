@@ -1,3 +1,12 @@
+"""
+Carga el checkpoint entrenado (checkpoint_final.pt) y genera texto,
+sin necesidad de reentrenar ni de tener el corpus a mano.
+
+Ejemplo de Uso:
+    python modelo/generar.py --texto "don quijote" --num-caracteres 300
+    python modelo/generar.py --texto "sancho" --temperatura 0.7 --top-k 10
+"""
+
 import argparse
 import os
 import sys
@@ -31,31 +40,67 @@ def cargar_modelo(ruta_checkpoint):
 
 
 @torch.no_grad()
-def generar(modelo, tokenizador, longitud_contexto, texto_inicial, num_caracteres, temperatura, top_k):
-    """Genera texto caracter a caracter.
+def siguiente_indice(modelo, indices, longitud_contexto, temperatura, top_k):
+    """Muestrea el indice del siguiente caracter dado el texto visto hasta ahora.
+
+    Es el paso elemental de la generacion; lo comparten generar() (CLI) y
+    generar_respuesta() (chat), para no duplicar la logica de muestreo.
 
     temperatura: <1 hace el modelo mas conservador, >1 mas arriesgado/caotico.
     top_k: si se indica, solo se puede elegir entre los k caracteres mas probables
            (descarta la 'cola' de caracteres muy improbables que producen errores).
     """
+    # El Transformer solo puede atender a longitud_contexto caracteres
+    contexto = indices[-longitud_contexto:]
+    entrada = torch.tensor(contexto).unsqueeze(0)
+
+    logits = modelo(entrada)[0, -1, :] / temperatura
+
+    if top_k is not None:
+        k = min(top_k, logits.size(-1))
+        valores_top, _ = torch.topk(logits, k)
+        logits[logits < valores_top[-1]] = float("-inf")
+
+    probabilidades = torch.softmax(logits, dim=0)
+    return torch.multinomial(probabilidades, num_samples=1).item()
+
+
+@torch.no_grad()
+def generar(modelo, tokenizador, longitud_contexto, texto_inicial, num_caracteres, temperatura, top_k):
+    """Genera exactamente num_caracteres caracteres a continuacion de texto_inicial."""
     indices = tokenizador.encode(texto_inicial)
 
     for _ in range(num_caracteres):
-        # El Transformer solo puede atender a longitud_contexto caracteres
-        contexto = indices[-longitud_contexto:]
-        entrada = torch.tensor(contexto).unsqueeze(0)
-
-        logits = modelo(entrada)[0, -1, :] / temperatura
-
-        if top_k is not None:
-            k = min(top_k, logits.size(-1))
-            valores_top, _ = torch.topk(logits, k)
-            logits[logits < valores_top[-1]] = float("-inf")
-
-        probabilidades = torch.softmax(logits, dim=0)
-        indices.append(torch.multinomial(probabilidades, num_samples=1).item())
+        indices.append(siguiente_indice(modelo, indices, longitud_contexto, temperatura, top_k))
 
     return tokenizador.decode(indices)
+
+
+@torch.no_grad()
+def generar_respuesta(modelo, tokenizador, longitud_contexto, prompt, max_caracteres, temperatura, top_k):
+    """Genera la respuesta a un prompt de dialogo, parando en el primer salto de linea.
+
+    En el formato del fine-tuning cada respuesta ocupa una sola linea, asi que el
+    salto de linea es la "senal de fin de turno". Parar ahi es mas robusto (y mas
+    barato) que generar una longitud fija y recortar despues.
+
+    Devuelve (respuesta, truncada): truncada=True si se alcanzo max_caracteres
+    sin que el modelo cerrara la linea.
+    """
+    indices = tokenizador.encode(prompt)
+    generados = []
+
+    for _ in range(max_caracteres):
+        indice = siguiente_indice(modelo, indices, longitud_contexto, temperatura, top_k)
+        indices.append(indice)
+        caracter = tokenizador.indice_a_caracter[indice]
+
+        # Ignoramos saltos de linea iniciales: solo cuenta como "fin" si ya hay contenido
+        if caracter == "\n" and "".join(generados).strip():
+            return "".join(generados).strip(), False
+        generados.append(caracter)
+
+    return "".join(generados).strip(), True
 
 
 def main():

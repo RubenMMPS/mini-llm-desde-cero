@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat con Don Quijote (mini-GPT de aprendizaje)</title>
+<style>
+  :root {
+    --fondo: #1b1612;
+    --panel: #2a221c;
+    --acento: #b08a4a;
+    --texto: #ecdfc8;
+    --texto-tenue: #9c8b73;
+    --burbuja-tu: #3a3127;
+    --burbuja-quijote: #4a3a24;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Georgia, 'Times New Roman', serif;
+    background: var(--fondo);
+    color: var(--texto);
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+  }
+  .contenedor {
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  header {
+    padding: 1rem 1.25rem 0.75rem;
+    border-bottom: 1px solid #44382a;
+  }
+  header h1 {
+    margin: 0 0 0.25rem;
+    font-size: 1.3rem;
+    color: var(--acento);
+  }
+  header p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--texto-tenue);
+    line-height: 1.4;
+  }
+  #mensajes {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .burbuja {
+    max-width: 80%;
+    padding: 0.55rem 0.8rem;
+    border-radius: 10px;
+    line-height: 1.4;
+    font-size: 0.95rem;
+    white-space: pre-wrap;
+  }
+  .tu {
+    align-self: flex-end;
+    background: var(--burbuja-tu);
+    border-bottom-right-radius: 2px;
+  }
+  .quijote {
+    align-self: flex-start;
+    background: var(--burbuja-quijote);
+    border-bottom-left-radius: 2px;
+  }
+  .etiqueta {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--texto-tenue);
+    margin-bottom: 0.15rem;
+  }
+  .meta {
+    align-self: flex-start;
+    font-size: 0.7rem;
+    color: var(--texto-tenue);
+    padding-left: 0.2rem;
+  }
+  form {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.85rem 1.25rem;
+    border-top: 1px solid #44382a;
+  }
+  input[type=text] {
+    flex: 1;
+    padding: 0.6rem 0.8rem;
+    border-radius: 8px;
+    border: 1px solid #55452f;
+    background: var(--panel);
+    color: var(--texto);
+    font-family: inherit;
+    font-size: 0.95rem;
+  }
+  input[type=text]:focus { outline: 2px solid var(--acento); }
+  button {
+    padding: 0.6rem 1.1rem;
+    border-radius: 8px;
+    border: none;
+    background: var(--acento);
+    color: #241c12;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.secundario {
+    margin-top: 0.6rem;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.75rem;
+    background: transparent;
+    color: var(--acento);
+    border: 1px solid var(--acento);
+  }
+</style>
+</head>
+<body>
+<div class="contenedor">
+  <header>
+    <h1>Don Quijote (mini-GPT de aprendizaje)</h1>
+    <p>
+      No es un asistente real: es un modelo de ~824K parametros, entrenado
+      desde cero sobre el Quijote y afinado para imitar el FORMATO de un
+      dialogo. Su "memoria" de la conversacion esta limitada a los
+      ultimos <strong id="ventana">128</strong> caracteres en total
+      (preguntas + respuestas) -- no a mensajes completos.
+    </p>
+    <button type="button" id="boton-nueva" class="secundario">Nueva conversación</button>
+  </header>
+
+  <div id="mensajes"></div>
+
+  <form id="formulario">
+    <input id="entrada" type="text" placeholder="Escribe algo..." autocomplete="off" required>
+    <button type="submit" id="boton-enviar">Enviar</button>
+  </form>
+</div>
+
+<script>
+const API_URL = "/api/chat";
+
+const divMensajes = document.getElementById("mensajes");
+const formulario = document.getElementById("formulario");
+const entrada = document.getElementById("entrada");
+const botonEnviar = document.getElementById("boton-enviar");
+const spanVentana = document.getElementById("ventana");
+const botonNueva = document.getElementById("boton-nueva");
+
+// Todo el historial vive en esta variable, en memoria del navegador.
+// Se pierde al recargar la pagina (no hay persistencia en disco) --
+// pero mientras la pestaña siga abierta, recuerda toda la conversacion.
+let historial = [];
+
+function anadirBurbuja(rol, texto) {
+  const burbuja = document.createElement("div");
+  burbuja.className = "burbuja " + rol;
+  const etiqueta = document.createElement("span");
+  etiqueta.className = "etiqueta";
+  etiqueta.textContent = rol === "tu" ? "Tú" : "Don Quijote";
+  burbuja.appendChild(etiqueta);
+  burbuja.appendChild(document.createTextNode(texto));
+  divMensajes.appendChild(burbuja);
+  divMensajes.scrollTop = divMensajes.scrollHeight;
+  return burbuja;
+}
+
+function anadirMeta(texto) {
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  meta.textContent = texto;
+  divMensajes.appendChild(meta);
+  divMensajes.scrollTop = divMensajes.scrollHeight;
+}
+
+formulario.addEventListener("submit", async (evento) => {
+  evento.preventDefault();
+  const mensaje = entrada.value.trim();
+  if (!mensaje) return;
+
+  anadirBurbuja("tu", mensaje);
+  entrada.value = "";
+  botonEnviar.disabled = true;
+  botonNueva.disabled = true;
+  anadirMeta("escribiendo...");
+
+  try {
+    const respuesta = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ historial, mensaje }),
+    });
+
+    if (!respuesta.ok) {
+      const error = await respuesta.json().catch(() => ({}));
+      throw new Error(
+        typeof error.detail === "string" ? error.detail : "Error del servidor: " + respuesta.status
+      );
+    }
+    const datos = await respuesta.json();
+
+    divMensajes.lastChild.remove(); // quita el "escribiendo..."
+    anadirBurbuja("quijote", datos.respuesta || "(sin respuesta)");
+    anadirMeta(
+      `contexto usado: ${datos.caracteres_contexto_usados}/${datos.ventana_contexto} caracteres` +
+      (datos.truncada ? " · respuesta cortada (el modelo no cerró la frase)" : "")
+    );
+    spanVentana.textContent = datos.ventana_contexto;
+
+    // Guardamos el turno completo en el historial para la siguiente ronda
+    historial.push({ rol: "tu", texto: mensaje });
+    historial.push({ rol: "quijote", texto: datos.respuesta || "" });
+  } catch (error) {
+    divMensajes.lastChild.remove();
+    anadirMeta("Error al contactar con el servidor: " + error.message);
+  } finally {
+    botonEnviar.disabled = false;
+    botonNueva.disabled = false;
+    entrada.focus();
+  }
+});
+
+botonNueva.addEventListener("click", () => {
+  historial = [];
+  divMensajes.replaceChildren();
+  entrada.focus();
+});
+</script>
+</body>
+</html>
