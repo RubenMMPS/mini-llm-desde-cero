@@ -2,13 +2,16 @@ import os
 import time
 import requests
 
-# Cada libro: (nombre_archivo, url_texto_plano)
-# Ambos son de dominio publico y estan en espanol.
-LIBROS = [
-    ("don_quijote.txt", "https://www.gutenberg.org/ebooks/2000.txt.utf-8"),
-    ("vida_de_don_quijote_y_sancho.txt", "https://www.gutenberg.org/ebooks/75472.txt.utf-8"),
-    ("azul.txt", "https://www.gutenberg.org/ebooks/52894.txt.utf-8"),
+IDS_LIBROS = [
+    2000,   # Don Quijote
+    75472,  # Vida de Don Quijote y Sancho
+    52894,  # Azul (Ruben Dario)
+    63412,  # Lo prohibido (novela completa, Galdos)
+    61202,  # Novelas ejemplares (Cervantes)
+    52392, 17340, 29506, 18005, 17223, 66263, 77337,
+    5937, 50216, 38124, 17013, 55589, 54521, 29468,
 ]
+LIBROS = [(f"gutenberg_{i}.txt", f"https://www.gutenberg.org/ebooks/{i}.txt.utf-8") for i in IDS_LIBROS]
 
 CARPETA_SALIDA = os.path.join(os.path.dirname(__file__), "raw")
 
@@ -37,7 +40,11 @@ def main():
             continue
 
         print(f"Descargando {nombre_archivo} desde {url} ...")
-        texto = descargar_libro(url)
+        try:
+            texto = descargar_libro(url)
+        except requests.RequestException as error:
+            print(f"  FALLO ({error}); se salta este libro.")
+            continue
 
         with open(ruta_destino, "w", encoding="utf-8") as f:
             f.write(texto)

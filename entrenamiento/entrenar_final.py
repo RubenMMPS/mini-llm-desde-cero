@@ -1,3 +1,4 @@
+import math
 import os
 import sys
 import time
@@ -24,14 +25,16 @@ TAMANO_BATCH = 32
 DIMENSION_EMBEDDING = 128
 NUM_CABEZAS = 4
 NUM_CAPAS = 4
-NUM_ITERACIONES = 10000
+NUM_ITERACIONES = 16000      # ronda 2: corpus mas grande -> mas iteraciones
 INTERVALO_EVALUACION = 200
 ITERACIONES_EVALUACION = 50  # cuantos lotes promediar al medir train/val loss
 TASA_APRENDIZAJE = 3e-4
+ITERACIONES_WARMUP = 200     # el lr sube de 0 a TASA_APRENDIZAJE en las primeras iteraciones
+LR_MINIMO = 3e-5             # el lr baja hasta aqui con una curva coseno
+RECORTE_GRADIENTE = 1.0      # evita saltos bruscos si un lote produce gradientes enormes
 
 # Modo de prueba rapida: activa con la variable de entorno PRUEBA_RAPIDA=1
 # Reduce drasticamente las iteraciones para verificar que todo funciona
-# en un par de minutos, antes de lanzar el entrenamiento completo (horas).
 if os.environ.get("PRUEBA_RAPIDA") == "1":
     NUM_ITERACIONES = 100
     INTERVALO_EVALUACION = 25
@@ -39,7 +42,7 @@ if os.environ.get("PRUEBA_RAPIDA") == "1":
     print(">>> MODO PRUEBA RAPIDA ACTIVADO (PRUEBA_RAPIDA=1) <<<\n")
 
 # Deteccion automatica de dispositivo: usa GPU con CUDA si esta disponible,
-# si no, CPU. 
+# si no, CPU. (Si mas adelante se instala torch-directml se puede cambiar esta linea a torch_directml.device() manualmente).
 DISPOSITIVO = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -111,6 +114,14 @@ def generar_texto(modelo, tokenizador, texto_inicial, num_caracteres=200, temper
     return tokenizador.decode(indices)
 
 
+def tasa_aprendizaje_en(iteracion):
+    """Warmup lineal y despues decaimiento coseno hasta LR_MINIMO."""
+    if iteracion <= ITERACIONES_WARMUP:
+        return TASA_APRENDIZAJE * iteracion / ITERACIONES_WARMUP
+    progreso = (iteracion - ITERACIONES_WARMUP) / max(1, NUM_ITERACIONES - ITERACIONES_WARMUP)
+    return LR_MINIMO + 0.5 * (TASA_APRENDIZAJE - LR_MINIMO) * (1 + math.cos(math.pi * progreso))
+
+
 def guardar_checkpoint(modelo, tokenizador):
     os.makedirs(os.path.dirname(RUTA_CHECKPOINT), exist_ok=True)
     torch.save(
@@ -152,12 +163,16 @@ def main():
 
     tiempo_inicio = time.time()
     for iteracion in range(1, NUM_ITERACIONES + 1):
+        for grupo in optimizador.param_groups:
+            grupo["lr"] = tasa_aprendizaje_en(iteracion)
+
         x, y = obtener_batch(datos_entrenamiento, datos_validacion, "train")
         logits = modelo(x)
         loss = funcion_perdida(logits.view(-1, tokenizador.tamano_vocabulario), y.view(-1))
 
         optimizador.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(modelo.parameters(), RECORTE_GRADIENTE)
         optimizador.step()
 
         if iteracion % INTERVALO_EVALUACION == 0 or iteracion == 1:
@@ -167,7 +182,8 @@ def main():
             print(
                 f"Iter {iteracion:5d} | train loss {perdidas['train']:.4f} | "
                 f"val loss {perdidas['val']:.4f} | perplejidad val {perplejidad_val:.2f} | "
-                f"{tiempo_transcurrido:.0f}s"
+                f"lr {tasa_aprendizaje_en(iteracion):.1e} | {tiempo_transcurrido:.0f}s "
+                f"(faltan ~{tiempo_transcurrido / iteracion * (NUM_ITERACIONES - iteracion) / 60:.0f} min)"
             )
 
             # Checkpoint periodico: si el entrenamiento se interrumpe, no se pierde

@@ -41,6 +41,12 @@ def limpiar_texto(texto: str) -> str:
     return texto.strip()
 
 
+def es_espanol(texto_crudo: str) -> bool:
+    """Gutenberg declara el idioma en la cabecera: 'Language: Spanish'."""
+    cabecera = texto_crudo[:5000]
+    return re.search(r"^Language:\s*Spanish", cabecera, re.IGNORECASE | re.MULTILINE) is not None
+
+
 def procesar_todos_los_libros() -> str:
     """Procesa cada archivo en raw/, los limpia y los combina en un solo corpus."""
     rutas_libros = sorted(glob.glob(os.path.join(CARPETA_RAW, "*.txt")))
@@ -55,7 +61,17 @@ def procesar_todos_los_libros() -> str:
         with open(ruta, "r", encoding="utf-8") as f:
             texto_crudo = f.read()
 
-        texto_obra = extraer_texto_del_libro(texto_crudo)
+        if not es_espanol(texto_crudo):
+            print(f"{os.path.basename(ruta)}: DESCARTADO (no esta marcado como Spanish)")
+            continue
+
+        try:
+            texto_obra = extraer_texto_del_libro(texto_crudo)
+        except ValueError:
+            print(f"{os.path.basename(ruta)}: DESCARTADO (sin marcadores de Gutenberg)")
+            continue
+
+        texto_obra = re.sub(r"\[[^\]]{0,300}\]", " ", texto_obra)  # notas [Nota del transcriptor...]
         texto_limpio = limpiar_texto(texto_obra)
 
         print(f"{os.path.basename(ruta)}: {len(texto_crudo):,} caracteres crudos -> {len(texto_limpio):,} limpios")
